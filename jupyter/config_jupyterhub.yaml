@@ -1,0 +1,87 @@
+# Example Jupyterhub configuration for ESIPhub
+hub:
+  # output of second execution of 'openssl rand -hex 32'
+  cookieSecret: ""
+  db:
+    type: sqlite-pvc
+    pvc:
+      accessModes:
+        - ReadWriteOnce
+      storage: 1Gi
+      storageClassName: managed-nfs-storage
+  extraEnv:
+    JUPYTER_ENABLE_LAB: 1
+  extraConfig: |
+    c.KubeSpawner.cmd = ['jupyter-labhub']
+    from tornado import gen
+    from traitlets import Dict
+    from jupyterhub.auth import Authenticator
+
+    class DictAuthenticator(Authenticator):
+
+        passwords = Dict(
+             {
+                  "user1": "password1",
+                  "user2": "password2"
+            },
+            config=True
+        )
+
+        @gen.coroutine
+        def authenticate(self, handler, data):
+            if self.passwords.get(data['username']) == data['password']:
+                return data['username']
+
+    c.JupyterHub.authenticator_class = DictAuthenticator
+
+proxy:
+  # output of second execution of 'openssl rand -hex 32'
+  secretToken: ""
+
+
+singleuser:
+  memory:
+    guarantee: 1G
+    limit: 8G
+  storage:
+    type: dynamic
+    capacity: 1Gi
+    dynamic:
+      storageClass: managed-nfs-storage
+    extraVolumeMounts:
+      - name: nfs-share
+        mountPath: /shared
+    extraVolumes:
+      - name: nfs-share
+        nfs:
+          # NFS service IP 
+          server: ""
+          path: "/"
+          readOnly: false
+  image:
+    name: ndslabs/esiphub-notebook
+    tag: latest
+  lifecycleHooks:
+    postStart:
+      exec:
+        command:
+          - "sh"
+          - "-c"
+          - >
+            if [ -d /shared ] && [ ! -L  ~/shared ]; then
+            ln -sf /shared ~;
+            fi;
+            if [ -f /shared/QuickStart.md ] && [ ! -f ~/QuickStart.md ]; then
+            cp /shared/QuickStart.md ~;
+            fi
+            
+ingress:
+  enabled: true
+  annotations:
+    kubernetes.io/tls-acme: "true"
+  hosts:
+    - jupyter.isgeo.ndslabs.org
+  tls:
+   - hosts:
+      - jupyter.isgeo.ndslabs.org
+     secretName: kubelego-tls-jupyterhub
