@@ -157,4 +157,59 @@ with shared storage mounted into each running container.
 
 ### Load test the server
 
-TBD. We use  `yuvipanda/hubtraf` to confirm the system can support the required number of users.
+We use  `yuvipanda/hubtraf` to confirm the system can support the required number of users.
+
+```
+mkdir loadtest
+cd loadtest
+```
+
+Create a JupyterHub `config.yaml` that will be used for testing only. This should be identical to the primary configuration except that it must use the default authenticator and the classic notebook by default.
+
+Install the helm chart for the test instance. This will be removed
+```
+sudo helm install jupyterhub/jupyterhub --version=v0.6 --name=test --namespace=test -f config.yaml
+```
+
+
+```
+git clone https://github.com/yuvipanda/hubtraf
+```
+
+Configure `hubtraf` by editing `helm-chart/values.yaml`
+```
+completions: 1
+image:
+  repository: craigwillis/hubtraf
+  tag: latest
+  pullPolicy: Always
+resources: {}
+
+hub:
+  url: "https://test.isgeo.ndslabs.org"
+
+users:
+  count: 50
+  startTime:
+    max: 300
+  runTime:
+    min: 300
+    max: 600
+```
+ 
+Run the helm chart:
+```
+sudo helm install --namespace=hubtraf  --name=hubtraf hubtraf/helm-chart/
+```
+     
+Monitor the test:
+```
+watch "kubectl get pods -n test"
+```
+
+Delete the helm chart and test namespace:
+```
+sudo helm delete --purge hubtraf
+kubectl delete ns test
+```
+
